@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather TimeMachine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+        /* トランジション効果 */
+        .weather-card, .skeleton-card {
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .weather-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+        /* スケルトンローディングのアニメーション */
+        @keyframes pulse {
+            50% { opacity: .5; }
+        }
+        .skeleton-card .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        /* カスタムスクロールバー */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-500">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <!-- ヘッダー -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4 md:mb-0 font-orbitron">
+                Weather TimeMachine
+            </h1>
+            <div class="flex flex-col sm:flex-row items-center gap-4">
+                <input type="date" id="date-picker" class="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                <select id="location-selector" class="bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition w-48">
+                    <optgroup id="japan-locations" label="Japan"></optgroup>
+                    <optgroup id="scifi-locations" label="Sci-Fi Cities"></optgroup>
+                </select>
+            </div>
+        </header>
+
+        <!-- 天気カードのコンテナ -->
+        <main id="weather-cards-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+            <!-- JavaScriptでスケルトンカードまたは天気カードがここに挿入されます -->
+        </main>
+
+        <!-- トリビアセクション -->
+        <footer class="mt-12 text-center">
+            <div id="trivia-container" class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md transition-all duration-500 opacity-0">
+                <h3 class="font-bold text-lg mb-2 text-blue-500 dark:text-blue-400 font-orbitron">Did you know?</h3>
+                <p id="trivia-text" class="text-gray-600 dark:text-gray-400 italic"></p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // DOM要素の取得
+        const datePicker = document.getElementById('date-picker');
+        const locationSelector = document.getElementById('location-selector');
+        const cardsContainer = document.getElementById('weather-cards-container');
+        const triviaText = document.getElementById('trivia-text');
+        const triviaContainer = document.getElementById('trivia-container');
+
+        // 場所の座標データ (全都道府県)
+        const locations = {
+            // Japan Prefectures
+            hokkaido: { lat: 43.06, lon: 141.35, name: "Hokkaido", isSF: false }, aomori: { lat: 40.82, lon: 140.74, name: "Aomori", isSF: false }, iwate: { lat: 39.7, lon: 141.15, name: "Iwate", isSF: false }, miyagi: { lat: 38.27, lon: 140.87, name: "Miyagi", isSF: false }, akita: { lat: 39.72, lon: 140.1, name: "Akita", isSF: false }, yamagata: { lat: 38.24, lon: 140.36, name: "Yamagata", isSF: false }, fukushima: { lat: 37.75, lon: 140.47, name: "Fukushima", isSF: false }, ibaraki: { lat: 36.34, lon: 140.45, name: "Ibaraki", isSF: false }, tochigi: { lat: 36.57, lon: 139.88, name: "Tochigi", isSF: false }, gunma: { lat: 36.39, lon: 139.06, name: "Gunma", isSF: false }, saitama: { lat: 35.86, lon: 139.65, name: "Saitama", isSF: false }, chiba: { lat: 35.6, lon: 140.12, name: "Chiba", isSF: false }, tokyo: { lat: 35.69, lon: 139.69, name: "Tokyo", isSF: false }, kanagawa: { lat: 35.45, lon: 139.64, name: "Kanagawa", isSF: false }, niigata: { lat: 37.9, lon: 139.02, name: "Niigata", isSF: false }, toyama: { lat: 36.7, lon: 137.21, name: "Toyama", isSF: false }, ishikawa: { lat: 36.59, lon: 136.63, name: "Ishikawa", isSF: false }, fukui: { lat: 36.07, lon: 136.22, name: "Fukui", isSF: false }, yamanashi: { lat: 35.66, lon: 138.57, name: "Yamanashi", isSF: false }, nagano: { lat: 36.65, lon: 138.18, name: "Nagano", isSF: false }, gifu: { lat: 35.39, lon: 136.72, name: "Gifu", isSF: false }, shizuoka: { lat: 34.98, lon: 138.38, name: "Shizuoka", isSF: false }, aichi: { lat: 35.18, lon: 136.91, name: "Aichi", isSF: false }, mie: { lat: 34.73, lon: 136.51, name: "Mie", isSF: false }, shiga: { lat: 35.0, lon: 135.87, name: "Shiga", isSF: false }, kyoto: { lat: 35.01, lon: 135.76, name: "Kyoto", isSF: false }, osaka: { lat: 34.69, lon: 135.5, name: "Osaka", isSF: false }, hyogo: { lat: 34.69, lon: 135.18, name: "Hyogo", isSF: false }, nara: { lat: 34.69, lon: 135.83, name: "Nara", isSF: false }, wakayama: { lat: 34.23, lon: 135.17, name: "Wakayama", isSF: false }, tottori: { lat: 35.5, lon: 134.24, name: "Tottori", isSF: false }, shimane: { lat: 35.47, lon: 133.05, name: "Shimane", isSF: false }, okayama: { lat: 34.66, lon: 133.93, name: "Okayama", isSF: false }, hiroshima: { lat: 34.4, lon: 132.46, name: "Hiroshima", isSF: false }, yamaguchi: { lat: 34.19, lon: 131.47, name: "Yamaguchi", isSF: false }, tokushima: { lat: 34.07, lon: 134.56, name: "Tokushima", isSF: false }, kagawa: { lat: 34.34, lon: 134.04, name: "Kagawa", isSF: false }, ehime: { lat: 33.84, lon: 132.77, name: "Ehime", isSF: false }, kochi: { lat: 33.56, lon: 133.53, name: "Kochi", isSF: false }, fukuoka: { lat: 33.59, lon: 130.4, name: "Fukuoka", isSF: false }, saga: { lat: 33.25, lon: 130.3, name: "Saga", isSF: false }, nagasaki: { lat: 32.75, lon: 129.87, name: "Nagasaki", isSF: false }, kumamoto: { lat: 32.8, lon: 130.7, name: "Kumamoto", isSF: false }, oita: { lat: 33.24, lon: 131.61, name: "Oita", isSF: false }, miyazaki: { lat: 31.91, lon: 131.42, name: "Miyazaki", isSF: false }, kagoshima: { lat: 31.56, lon: 130.56, name: "Kagoshima", isSF: false }, okinawa: { lat: 26.21, lon: 127.68, name: "Okinawa", isSF: false },
+            // Sci-Fi Cities
+            mars: { lat: 18.65, lon: 226.2, name: "Olympus Mons City (Mars)", isSF: true },
+            titan: { lat: -78.92, lon: 106.54, name: "Titan Floating City", isSF: true }
+        };
+
+        // トリビアデータ
+        const trivias = {
+            japan: ["日本には約6,800の島があります。", "世界で最も古い会社は日本にあり、578年創業の金剛組です。", "自動販売機は日本中にあり、その数は世界一です。", "日本の識字率はほぼ100%です。", "毎年、日本では1,500回以上の地震が記録されます。", "カラオケは「空のオーケストラ」を意味する日本の発明品です。", "青信号は、しばしば「青」ではなく「緑」と呼ばれますが、法律上は青色です。", "世界初の長編小説とされる「源氏物語」は、11世紀の日本で女性によって書かれました。"],
+            mars: ["火星には太陽系で最も高い火山「オリンポス山」があり、その高さはエベレストの約3倍です。", "火星の夕焼けは、地球の赤色とは対照的に青色です。", "火星の1年は地球の約2倍、687日です。"],
+            titan: ["タイタンは土星最大の衛星で、太陽系では唯一、分厚い大気を持っています。", "タイタンの地表には、メタンやエタンでできた川や湖、海が存在します。", "タイタンの地表温度は摂氏マイナス180度と非常に低いです。"]
+        };
+
+        // WMO天候コードのマッピング
+        const weatherCodes = { 0: { icon: '☀️', description: 'Clear sky' }, 1: { icon: '🌤️', description: 'Mainly clear' }, 2: { icon: '⛅️', description: 'Partly cloudy' }, 3: { icon: '☁️', description: 'Overcast' }, 45: { icon: '🌫️', description: 'Fog' }, 48: { icon: '🌫️', description: 'Depositing rime fog' }, 51: { icon: '🌦️', description: 'Light drizzle' }, 53: { icon: '🌦️', description: 'Moderate drizzle' }, 55: { icon: '🌦️', description: 'Dense drizzle' }, 61: { icon: '🌧️', description: 'Slight rain' }, 63: { icon: '🌧️', description: 'Moderate rain' }, 65: { icon: '🌧️', description: 'Heavy rain' }, 80: { icon: '🌧️', description: 'Slight rain showers' }, 81: { icon: '🌧️', description: 'Moderate rain showers' }, 82: { icon: '⛈️', description: 'Violent rain showers' }, 95: { icon: '⛈️', description: 'Thunderstorm' } };
+        
+        // 気温に基づいて色を計算
+        function getTempColor(temp) {
+            const locationData = locations[locationSelector.value];
+            const minTemp = locationData.isSF ? -100 : -10;
+            const maxTemp = locationData.isSF ? 0 : 40;
+            const normalizedTemp = Math.max(0, Math.min(1, (temp - minTemp) / (maxTemp - minTemp)));
+            const hue = 240 - (normalizedTemp * 240);
+            const saturation = locationData.isSF ? 95 : 70;
+            const lightness = locationData.isSF ? 60 : 80;
+            return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        }
+
+        // 天気データを取得
+        async function fetchWeather(lat, lon, date) {
+            const apiUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`;
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                if (data.daily && data.daily.time.length > 0) {
+                    return { date: data.daily.time[0], maxTemp: data.daily.temperature_2m_max[0], minTemp: data.daily.temperature_2m_min[0], weatherCode: data.daily.weathercode[0] };
+                }
+                return null;
+            } catch (error) {
+                console.error("Failed to fetch weather data:", error);
+                return null;
+            }
+        }
+        
+        // スケルトンカードを生成
+        function createSkeletonCard() { return `<div class="skeleton-card bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 flex flex-col justify-between items-center text-center"><div class="w-full"><div class="pulse bg-gray-300 dark:bg-gray-700 h-7 w-3/4 mx-auto rounded"></div><div class="pulse bg-gray-300 dark:bg-gray-700 h-4 w-1/2 mx-auto rounded mt-2"></div></div><div class="my-4"><div class="pulse bg-gray-300 dark:bg-gray-700 h-20 w-20 mx-auto rounded-full"></div><div class="pulse bg-gray-300 dark:bg-gray-700 h-5 w-2/3 mx-auto rounded mt-3"></div></div><div class="w-full"><div class="pulse bg-gray-300 dark:bg-gray-700 h-10 w-1/2 mx-auto rounded"></div><div class="pulse bg-gray-300 dark:bg-gray-700 h-5 w-3/4 mx-auto rounded mt-2"></div></div></div>`; }
+
+        // 天気カードのHTMLを生成 (エラー修正版)
+        function createWeatherCard(data, offset, baseTemp) {
+            if (!data) {
+                return `<div class="weather-card bg-gray-200 dark:bg-gray-800 rounded-xl shadow-lg p-6 flex flex-col justify-center items-center text-center"><h2 class="text-xl font-bold text-gray-700 dark:text-gray-300">${offset.label}</h2><p class="mt-4 text-gray-500">No data available</p></div>`;
+            }
+
+            const maxTemp = data.maxTemp;
+            const minTemp = data.minTemp;
+            const isMaxTempNumber = typeof maxTemp === 'number';
+            const isMinTempNumber = typeof minTemp === 'number';
+
+            const maxTempText = isMaxTempNumber ? `${maxTemp.toFixed(1)}°` : 'N/A';
+            const minTempText = isMinTempNumber ? `${minTemp.toFixed(1)}°` : 'N/A';
+
+            const avgTemp = (isMaxTempNumber && isMinTempNumber) ? (maxTemp + minTemp) / 2 : null;
+            const isAvgTempNumber = typeof avgTemp === 'number';
+
+            const avgTempText = isAvgTempNumber ? `${avgTemp.toFixed(1)}°C` : 'N/A';
+            const bgColor = isAvgTempNumber ? getTempColor(avgTemp) : 'rgb(229, 231, 235)';
+
+            const weatherInfo = weatherCodes[data.weatherCode] || { icon: '❓', description: 'Unknown' };
+            
+            let trendHtml = '';
+            if (baseTemp !== null && isAvgTempNumber && offset.years > 0) {
+                const diff = avgTemp - baseTemp;
+                const trendIcon = diff > 0 ? '🔼' : '🔽';
+                const trendColor = diff > 0 ? 'text-red-500' : 'text-blue-500';
+                trendHtml = `<div class="trend ${trendColor} font-semibold">${trendIcon} ${diff.toFixed(1)}°C</div>`;
+            }
+
+            return `<div class="weather-card bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 flex flex-col justify-between items-center text-center" style="background-color: ${bgColor};"><div class="w-full"><h2 class="text-xl font-bold text-gray-800">${offset.label}</h2><p class="text-sm text-gray-600">${data.date || ''}</p></div><div class="my-4"><span class="text-6xl">${weatherInfo.icon}</span><p class="text-gray-700 font-medium">${weatherInfo.description}</p></div><div class="w-full"><div class="text-4xl font-bold text-gray-900">${avgTempText}</div><div class="text-gray-600"><span>H: ${maxTempText}</span> / <span>L: ${minTempText}</span></div>${trendHtml}</div></div>`;
+        }
+
+        // UIを更新するメイン関数
+        async function updateUI() {
+            cardsContainer.innerHTML = Array(5).fill(createSkeletonCard()).join('');
+            const selectedDate = new Date(datePicker.value);
+            const locationData = locations[locationSelector.value];
+            document.body.classList.toggle('font-orbitron', locationData.isSF);
+            const dateOffsets = [ { label: 'Today', years: 0 }, { label: '5 Years Ago', years: 5 }, { label: '10 Years Ago', years: 10 }, { label: '20 Years Ago', years: 20 }, { label: '30 Years Ago', years: 30 }];
+            const todayDateStr = selectedDate.toISOString().split('T')[0];
+            const todayData = await fetchWeather(locationData.lat, locationData.lon, todayDateStr);
+            const baseTemp = (todayData && typeof todayData.maxTemp === 'number' && typeof todayData.minTemp === 'number') 
+                ? (todayData.maxTemp + todayData.minTemp) / 2 
+                : null;
+
+            cardsContainer.children[0].outerHTML = createWeatherCard(todayData, dateOffsets[0], baseTemp);
+            const pastDataPromises = dateOffsets.slice(1).map(offset => {
+                const targetDate = new Date(selectedDate);
+                targetDate.setFullYear(selectedDate.getFullYear() - offset.years);
+                return fetchWeather(locationData.lat, locationData.lon, targetDate.toISOString().split('T')[0]);
+            });
+            const pastDataResults = await Promise.all(pastDataPromises);
+            pastDataResults.forEach((data, index) => {
+                 cardsContainer.children[index + 1].outerHTML = createWeatherCard(data, dateOffsets[index + 1], baseTemp);
+            });
+            updateTrivia();
+        }
+
+        // トリビアを更新
+        function updateTrivia() {
+            const locationData = locations[locationSelector.value];
+            const triviaKey = locationData.isSF ? locationSelector.value : 'japan';
+            const locationTrivias = trivias[triviaKey];
+            const randomIndex = Math.floor(Math.random() * locationTrivias.length);
+            triviaContainer.style.opacity = 0;
+            setTimeout(() => {
+                triviaText.textContent = locationTrivias[randomIndex];
+                triviaContainer.style.opacity = 1;
+            }, 300);
+        }
+
+        // 場所の選択肢を動的に生成
+        function populateLocationSelector() {
+            const japanGroup = document.getElementById('japan-locations');
+            const scifiGroup = document.getElementById('scifi-locations');
+            for (const key in locations) {
+                const location = locations[key];
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = location.name;
+                if (location.isSF) {
+                    scifiGroup.appendChild(option);
+                } else {
+                    japanGroup.appendChild(option);
+                }
+            }
+            // 東京をデフォルトに設定
+            locationSelector.value = 'tokyo';
+        }
+
+        // 初期化処理
+        function init() {
+            populateLocationSelector();
+            datePicker.value = new Date().toISOString().split('T')[0];
+            datePicker.addEventListener('change', updateUI);
+            locationSelector.addEventListener('change', updateUI);
+            updateUI();
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

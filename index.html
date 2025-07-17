@@ -129,28 +129,22 @@
         // スケルトンカードを生成
         function createSkeletonCard() { return `<div class="skeleton-card bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 flex flex-col justify-between items-center text-center"><div class="w-full"><div class="pulse bg-gray-300 dark:bg-gray-700 h-7 w-3/4 mx-auto rounded"></div><div class="pulse bg-gray-300 dark:bg-gray-700 h-4 w-1/2 mx-auto rounded mt-2"></div></div><div class="my-4"><div class="pulse bg-gray-300 dark:bg-gray-700 h-20 w-20 mx-auto rounded-full"></div><div class="pulse bg-gray-300 dark:bg-gray-700 h-5 w-2/3 mx-auto rounded mt-3"></div></div><div class="w-full"><div class="pulse bg-gray-300 dark:bg-gray-700 h-10 w-1/2 mx-auto rounded"></div><div class="pulse bg-gray-300 dark:bg-gray-700 h-5 w-3/4 mx-auto rounded mt-2"></div></div></div>`; }
 
-        // 天気カードのHTMLを生成 (エラー修正版)
+        // 天気カードのHTMLを生成
         function createWeatherCard(data, offset, baseTemp) {
             if (!data) {
                 return `<div class="weather-card bg-gray-200 dark:bg-gray-800 rounded-xl shadow-lg p-6 flex flex-col justify-center items-center text-center"><h2 class="text-xl font-bold text-gray-700 dark:text-gray-300">${offset.label}</h2><p class="mt-4 text-gray-500">No data available</p></div>`;
             }
-
             const maxTemp = data.maxTemp;
             const minTemp = data.minTemp;
             const isMaxTempNumber = typeof maxTemp === 'number';
             const isMinTempNumber = typeof minTemp === 'number';
-
             const maxTempText = isMaxTempNumber ? `${maxTemp.toFixed(1)}°` : 'N/A';
             const minTempText = isMinTempNumber ? `${minTemp.toFixed(1)}°` : 'N/A';
-
             const avgTemp = (isMaxTempNumber && isMinTempNumber) ? (maxTemp + minTemp) / 2 : null;
             const isAvgTempNumber = typeof avgTemp === 'number';
-
             const avgTempText = isAvgTempNumber ? `${avgTemp.toFixed(1)}°C` : 'N/A';
             const bgColor = isAvgTempNumber ? getTempColor(avgTemp) : 'rgb(229, 231, 235)';
-
             const weatherInfo = weatherCodes[data.weatherCode] || { icon: '❓', description: 'Unknown' };
-            
             let trendHtml = '';
             if (baseTemp !== null && isAvgTempNumber && offset.years > 0) {
                 const diff = avgTemp - baseTemp;
@@ -158,29 +152,43 @@
                 const trendColor = diff > 0 ? 'text-red-500' : 'text-blue-500';
                 trendHtml = `<div class="trend ${trendColor} font-semibold">${trendIcon} ${diff.toFixed(1)}°C</div>`;
             }
-
             return `<div class="weather-card bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 flex flex-col justify-between items-center text-center" style="background-color: ${bgColor};"><div class="w-full"><h2 class="text-xl font-bold text-gray-800">${offset.label}</h2><p class="text-sm text-gray-600">${data.date || ''}</p></div><div class="my-4"><span class="text-6xl">${weatherInfo.icon}</span><p class="text-gray-700 font-medium">${weatherInfo.description}</p></div><div class="w-full"><div class="text-4xl font-bold text-gray-900">${avgTempText}</div><div class="text-gray-600"><span>H: ${maxTempText}</span> / <span>L: ${minTempText}</span></div>${trendHtml}</div></div>`;
         }
 
-        // UIを更新するメイン関数
+        // UIを更新するメイン関数 (日付処理を修正)
         async function updateUI() {
             cardsContainer.innerHTML = Array(5).fill(createSkeletonCard()).join('');
-            const selectedDate = new Date(datePicker.value);
+
+            // `new Date(YYYY-MM-DD)` はタイムゾーンによって解釈が異なるため、計算用のDateオブジェクトを慎重に作成
+            const dateParts = datePicker.value.split('-').map(Number);
+            const selectedDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+
             const locationData = locations[locationSelector.value];
             document.body.classList.toggle('font-orbitron', locationData.isSF);
             const dateOffsets = [ { label: 'Today', years: 0 }, { label: '5 Years Ago', years: 5 }, { label: '10 Years Ago', years: 10 }, { label: '20 Years Ago', years: 20 }, { label: '30 Years Ago', years: 30 }];
-            const todayDateStr = selectedDate.toISOString().split('T')[0];
+            
+            // "Today"のデータ取得には、datePickerの値を直接使用
+            const todayDateStr = datePicker.value;
             const todayData = await fetchWeather(locationData.lat, locationData.lon, todayDateStr);
             const baseTemp = (todayData && typeof todayData.maxTemp === 'number' && typeof todayData.minTemp === 'number') 
                 ? (todayData.maxTemp + todayData.minTemp) / 2 
                 : null;
 
             cardsContainer.children[0].outerHTML = createWeatherCard(todayData, dateOffsets[0], baseTemp);
+            
             const pastDataPromises = dateOffsets.slice(1).map(offset => {
                 const targetDate = new Date(selectedDate);
-                targetDate.setFullYear(selectedDate.getFullYear() - offset.years);
-                return fetchWeather(locationData.lat, locationData.lon, targetDate.toISOString().split('T')[0]);
+                targetDate.setFullYear(targetDate.getFullYear() - offset.years);
+                
+                // 計算後の日付をローカルタイムゾーンに基づいて 'YYYY-MM-DD' 形式の文字列に変換
+                const yyyy = targetDate.getFullYear();
+                const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+                const dd = String(targetDate.getDate()).padStart(2, '0');
+                const dateString = `${yyyy}-${mm}-${dd}`;
+
+                return fetchWeather(locationData.lat, locationData.lon, dateString);
             });
+
             const pastDataResults = await Promise.all(pastDataPromises);
             pastDataResults.forEach((data, index) => {
                  cardsContainer.children[index + 1].outerHTML = createWeatherCard(data, dateOffsets[index + 1], baseTemp);
@@ -223,7 +231,13 @@
         // 初期化処理
         function init() {
             populateLocationSelector();
-            datePicker.value = new Date().toISOString().split('T')[0];
+            
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            datePicker.value = `${yyyy}-${mm}-${dd}`;
+
             datePicker.addEventListener('change', updateUI);
             locationSelector.addEventListener('change', updateUI);
             updateUI();
